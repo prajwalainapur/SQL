@@ -1,0 +1,594 @@
+--************************************************************************************************************
+
+DATA INGESTION AND PROCESSING - CASE STUDY
+
+Members: Durga Pandey and Prajwal Brijesh Ainapur
+
+--************************************************************************************************************
+
+
+--  OVERVIEW:
+--  The New York City Taxi & Limousine Commission (TLC) has provided a dataset of trips made by the taxis in the New York City. 
+--  The detailed trip-level data is more than just a vast list of taxi pickup and drop off coordinates.
+--  The records include fields capturing pick-up and drop-off dates/times, pick-up and 
+--  drop-off locations (location coordinates of the starting and ending points), trip distances, itemized fares, rate types, 
+--  payment types, driver-reported passenger counts etc. The data used was collected and provided to the 
+--  NYC Taxi and Limousine Commission (TLC) by technology providers authorized under the Taxicab & Livery Passenger Enhancement 
+--  Programs (TPEP/LPEP).
+
+
+-- Steps involved : 
+-- 1) EDA
+-- 2) Data cleaning and Partioning 
+-- 3) Analysis 1
+-- 4) Analysis 2
+
+
+
+--  **** IMPORTANT: BEFORE CREATING ANY TABLE, MAKE SURE YOU RUN THIS COMMAND ****
+
+ADD JAR /opt/cloudera/parcels/CDH/lib/hive/lib/hive-hcatalog-core-1.1.0-cdh5.11.2.jar;
+
+
+--  **** SETTING THE EXECUTION ENGINE AS MAP REDUCE ****
+
+SET hive.execution.engine=mr;
+
+
+--  **** SETTING PARTITION BASED PARAMETERS FOR HIVE ****
+
+SET hive.exec.max.dynamic.partitions=100000;
+SET hive.exec.max.dynamic.partitions.pernode=100000;
+
+
+-- **** CREATING AN EXTERNAL TABLE ON THE GIVEN DATA ****
+
+create external table if not exists nyc(
+vendorID int, tpep_pickup_datetime timestamp, tpep_dropoff_datetime timestamp, passenger_count int,
+trip_distance double, RatecodeID int, store_and_fwd_flag string, PULocationID int, DOLocationID int,
+payment_type int, fare_amount double, extra double, mta_tax double, tip_amount double,
+tolls_amount double, improvement_surcharge double, total_amount double)
+ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' STORED AS TEXTFILE
+LOCATION '/common_folder/nyc_taxi_data/' tblproperties ("skip.header.line.count"="1");
+
+
+-- **** CALCULATING NUMBER OF ROWS IN THE TABLE ****
+
+select count(*) from nyc;
+
+-- OUTPUT: Total Records: 1174569
+
+
+-- **** EDA ****
+--DISTINCT VALUES
+
+SELECT COUNT(*) AS `Total Records`,
+       COUNT(DISTINCT vendorID) AS `Distinct Vendors`,
+       COUNT(DISTINCT Passenger_count) AS `Distinct Passenger Counts`,
+       COUNT(DISTINCT RateCodeID) AS `Distinct Rate Code IDs`,
+       COUNT(DISTINCT Store_and_fwd_flag) AS `Distinct Store and Fwd Flags`,
+       COUNT(DISTINCT Payment_type) AS `Distinct Payment Types`,
+       COUNT(DISTINCT to_date(tpep_pickup_datetime)) AS `Distinct Pickup Date Counts`,
+       COUNT(DISTINCT to_date(tpep_dropoff_datetime)) AS `Distinct Dropoff Date Counts`
+FROM nyc;
+
+--  OUTPUT:
+-- Total Records	1174569
+-- Distinct Vendors	2
+-- Distinct Passenger Counts	10
+-- Distinct Rate Code Ids	7
+-- Distinct Store And Fwd Flags	2
+-- Distinct Payment Types	4
+-- Distinct Pickup Date Counts	66
+-- Distinct Dropoff Date Counts	67
+
+
+--NO OF ENTRIES
+
+select vendorid, count(*) as 'count'
+from nyc
+group by vendorid;
+
+--OUTPUT:
+--  vendorid	count 
+--  1	        527386
+--  2	        647183
+
+
+--CHECK FOR EMPTY DATA
+
+select sum(case when VendorID is null then 1 else 0 end) as vendorID,
+sum(case when tpep_pickup_datetime is null then 1 else 0 end) as tpep_pickup_datetime,
+sum(case when tpep_dropoff_datetime is null then 1 else 0 end) as tpep_dropoff_datetime,
+sum(case when passenger_count is null then 1 else 0 end) as passenger_count,
+sum(case when trip_distance is null then 1 else 0 end) as	trip_distance,
+sum(case when RatecodeID is null then 1 else 0 end) as RatecodeID,
+sum(case when store_and_fwd_flag is null then 1 else 0 end) as store_and_fwd_flag,
+sum(case when PULocationID is null then 1 else 0 end) as PULocationID,
+sum(case when DOLocationID is null then 1 else 0 end) as DOLocationID,
+sum(case when payment_type is null then 1 else 0 end) as payment_type,
+sum(case when fare_amount is null then 1 else 0 end) as fare_amount,
+sum(case when extra is null then 1 else 0 end) as extra,
+sum(case when mta_tax is null then 1 else 0 end) as mta_tax,
+sum(case when tip_amount is null then 1 else 0 end) as tip_amount,
+sum(case when tolls_amount is null then 1 else 0 end) as tolls_amount,
+sum(case when improvement_surcharge is null then 1 else 0 end) as improvement_surcharge,
+sum(case when total_amount is null then 1 else 0 end) as total_amount 	
+from nyc;
+
+--OUTPUT:
+--All columns are '0' i.e. no missing values for any columns
+
+
+--VALIDATING MAXIMUM AND MINIMUM DATA AS SPECIFIED IN THE DICTIONARY
+
+select max(VendorID ) max_VendorID , min(VendorID ) min_VendorID ,
+max(tpep_pickup_datetime ) max_tpep_pickup_datetime , min(tpep_pickup_datetime ) min_tpep_pickup_datetime ,
+max(tpep_dropoff_datetime ) max_tpep_dropoff_datetime , min(tpep_dropoff_datetime ) min_tpep_dropoff_datetime ,
+max(passenger_count ) max_passenger_count , min(passenger_count ) min_passenger_count ,
+max(trip_distance ) max_trip_distance , min(trip_distance ) min_trip_distance ,
+max(RatecodeID ) max_RatecodeID , min(RatecodeID ) min_RatecodeID ,
+max(store_and_fwd_flag ) max_store_and_fwd_flag , min(store_and_fwd_flag ) min_store_and_fwd_flag ,
+max(PULocationID ) max_PULocationID , min(PULocationID ) min_PULocationID ,
+max(DOLocationID ) max_DOLocationID , min(DOLocationID ) min_DOLocationID ,
+max(payment_type ) max_payment_type , min(payment_type ) min_payment_type ,
+max(fare_amount ) max_fare_amount , min(fare_amount ) min_fare_amount ,
+max(extra ) max_extra , min(extra ) min_extra ,
+max(mta_tax ) max_mta_tax , min(mta_tax ) min_mta_tax ,
+max(tip_amount ) max_tip_amount , min(tip_amount ) min_tip_amount ,
+max(tolls_amount ) max_tolls_amount , min(tolls_amount ) min_tolls_amount ,
+max(improvement_surcharge ) max_improvement_surcharge , min(improvement_surcharge ) min_improvement_surcharge ,
+max(total_amount ) max_total_amount , min(total_amount ) min_total_amount  
+from nyc;
+
+--OBSERVATION:
+-- Based on output; The following are the observations by comparing it with the metadata
+-- Columns with correct data: vendorID, Fare Amount(Automatically entered by the machine), passenger_count; 
+-- min in total_amount has negative data
+-- improvement surcharge is wrong
+-- tolls_amount cannot be negative
+-- tip_amount cannot be negative
+-- mta_tax is negative
+-- extra charges on the ride cannot be negative
+-- fare_amount cannot be negative
+-- rate code has to be withing 1-6 but instead maximum value is 99
+-- datetime has a wide range i.e. more than actual data which is nov and dec of 2017
+
+
+
+--IDENTIFYING VENDOR WITH BAD DATA ENTRY
+
+-- **** CORRECTNESS IN TIMESTAMP DATA **** 
+
+--CRITERIA 1: TIME STAMP FOR PICKUP
+
+select  vendorid, count(*)from  nyc
+where tpep_pickup_datetime < '2017-11-1 00:00:00.0' or tpep_pickup_datetime>='2018-01-01 00:00:00.0'
+group by vendorid;
+
+--OUTPUT: Vendor 2 has 14 wrong entries and thus vendor 2 has done bad job for this column
+
+
+--CRITERIA 2: TIME STAMP FOR DROP
+
+select  vendorid, count(*)from  nyc
+where tpep_dropoff_datetime < '2017-11-1 00:00:00.0' or tpep_dropoff_datetime>='2018-01-01 00:00:00.0'
+group by vendorid;
+
+--OUTPUT: Vendor 2 has 88 missing entries whereas vendor 1 has 29 of them
+
+
+--CRITERIA 3: DROP OFF SHOULD BE AFTER PICK UP
+
+select vendorid, count(*) from nyc
+where tpep_dropoff_datetime < tpep_pickup_datetime
+group by vendorid;
+
+--OUTPUT: vendor 1 has 73 wrong entries where in the drop off timestamp is before the pick up time
+
+--Thus overall in terms of timestamp, vendor 2 has more wrong entries in terms of wrong timestamps and vendor 1 has more wrongly filled in data
+
+
+-- **** CORRECTNESS IN RATECODEID (VALID CODES ARE 1-6) **** 
+
+select ratecodeid, vendorid, count(*) as 'count'
+from  nyc
+group by ratecodeid, vendorid
+order by ratecodeid, vendorid;
+
+--  OUTPUT:
+--  Ratecodeid  vendorid    count
+--  1			1	        513991
+--  1			2			628287
+--	2			1			10544
+--	2			2			14794
+--	3			1			1186
+--	3			2			1376
+--	4			1			230
+--	4			2			356
+--	5			1			1425
+--	5			2			2368
+--	6			1			2
+--	6			2			1
+--	99			1			8
+--	99			2			1
+
+--OBSERVATION: Vendor 1 has 8 entries with code 99 and vendor 2 has 1
+--OBSERVATION: RateCodeID is not equally distribute across trips so cannot be used to partition data
+
+
+--NOTE: fare amount should not be negative but again as per the dictionary the values are calculated by the meter and thus any wrong values can be ignored as an error from the system by itself
+
+
+-- **** EXTRA: AS PER THE DICTIONARY, ONLY 0.5$ AND 1$ ARE LEVIED AS EXTRAS THUS ONLY 0, 0.5, 1 ARE ACCEPTABLE VALUES **** 
+
+select vendorid, count(*) from  nyc 
+where extra not in (0,0.5,1)
+group by vendorid
+order by vendorid;
+
+--OUTPUT: Vendor 2 has the most wrong entries with about 3033 where as Vendor 1 has 1823 entries
+
+
+-- **** MTA_TAX: AS PER THE DICTIONARY ONLY $0.5 IS LEVIED AND THUS ONLY 0 AND O.5 ARE ACCEPTABLE VALUES **** 
+
+select vendorid, count(*)
+from nyc
+where mta_tax not in (0, 0.5)
+group by vendorid;
+
+--OUTPUT: Vendor 2 is majorly in fault as  they have 547 wrong entries
+
+
+-- **** TIP_AMOUNT -> AUTOMATICALLY POPULATED FOR CREDIT CARD AND CASH TIPS ARE NOT INCLUDED **** 
+
+--NEGATIVE TIP AMOUNT
+
+select vendorid, count(*)
+from nyc
+where tip_amount < 0
+group by vendorid;
+
+--OBSERVATION: 4 entries from vendor 2 are negative
+
+
+--TIP AMOUNT WHEN PAYMENT MODE IS NOT BY CREDIT CARD
+
+select vendorid, count(*) from  nyc
+where Payment_type!=1 and tip_amount>0
+group by vendorid;
+
+--OBSERVATION: Vendor 1 has 17 entires where there is a tip amount but it is not via credit card
+
+
+-- **** tolls_amount **** 
+
+select vendorid, count(*)
+from nyc
+where tolls_amount < 0
+group by vendorid;
+
+--OBSERVATION: Vendor 2 has 3 wrong entries where the values for toll amount is negative
+
+
+-- **** improvement_surcharge -> 0.3 is levied after 2015 i.e. for our required dates, it should be present on all data **** 
+
+select vendorid, count(*)
+from nyc
+where improvement_surcharge not in (0, 0.3)
+group by vendorid;
+
+--OBSERVATION: Vendor 2 again is at fault with 562 faulty entries
+
+
+-- **** total_amount -> Shouldn't be negative **** 
+
+select vendorid, count(*)
+from nyc
+where total_amount < 0
+group by vendorid;
+
+--OBSERVATION: vendor 2 has more faulty entries again amounting 558 negative total amount data
+
+
+
+--OVERALL OBSERVATION: Vendor 2 has more faulty entries as analyzed over all the wrong data entried columsn
+
+
+-- **** DATA CLEANING AND PARTIONING **** 
+
+-- **** REMOVING ERRONEOUS AND PUSHING IT INTO A PARTITIONED ORC TABLE **** 
+
+--BASED ON THE ABOVE CONSIDERATIONS, A NEW ORC TABLE HAS TO BE MADE BY FILTERING OUT THE WRONG DATA
+
+--CREATE AND PARTITIONED ORC TABLE
+
+Create external table if not exists ORCdata(
+tpep_pickup_datetime timestamp,
+tpep_dropoff_datetime timestamp,
+passenger_count int,
+trip_distance double,
+RatecodeID int,
+store_and_fwd_flag string,
+PULocationID int,
+DOLocationID int,
+payment_type int,
+fare_amount double,
+extra double,
+mta_tax double,
+tip_amount double,
+tolls_amount double,
+improvement_surcharge double,
+total_amount double
+)
+partitioned by (Mnth int,VendorID int)
+stored as orc location '/user/hive/warehouse/prajwalAinapur'
+tblproperties ("orc.compress"="SNAPPY");
+
+
+--INSERTING DATA INTO THE TABLE
+
+insert overwrite table orcdata partition(Mnth,VendorID)
+select 
+tpep_pickup_datetime,
+tpep_dropoff_datetime,
+passenger_count,
+trip_distance,
+RatecodeID,
+store_and_fwd_flag,
+PULocationID,
+DOLocationID,
+payment_type,
+fare_amount,
+extra,
+mta_tax,
+tip_amount,
+tolls_amount,
+improvement_surcharge,
+total_amount,
+month(tpep_pickup_datetime) Mnth,
+VendorID
+from  nyc
+where  (tpep_pickup_datetime >='2017-11-1 00:00:00.0' and tpep_pickup_datetime < '2018-01-01 00:00:00.0') and
+( tpep_dropoff_datetime >= '2017-11-1 00:00:00.0' and tpep_dropoff_datetime < '2018-01-02 00:00:00.0') and
+(tpep_dropoff_datetime > tpep_pickup_datetime) and
+(trip_distance > 0) and 
+(ratecodeid in (1,6)) and
+(fare_amount > 0) and
+(extra in (0,0.5,1)) and
+(mta_tax in (0,0.5)) and 
+((tip_amount >= 0 and Payment_type = 1) or (Payment_type != 1 and tip_amount = 0)) and
+(tolls_amount >= 0) and
+(improvement_surcharge in (0,0.3)) and
+(total_amount > 0);
+
+
+--VERIFYING THE NUMBER OF ENTRIES IN THE TABLE AFTER CLEANING THE DATA
+
+select count(*)
+from orcdata;
+
+--OUTPUT: There are 1135922 rows in the cleaned out orc table 
+--OBSERVATION: 1174569 rows were reduced to 1135922 rows i.e. 3.2% of the data were removed which is acceptable
+
+
+
+--  ****  ANALYSIS 1  ****  
+
+--QUERY 1:
+
+--AVERAGE OVERALL FARE PER TRIP FOR NOVEMEBER AND DECEMBER
+
+select mnth as month, round(avg(total_amount),2)as avgTotalFare, round(avg(fare_amount),2) as fareAmount
+from orcdata 
+group by mnth;
+
+--OUTPUT:
+--month 	avgtotalfare 	fareamount
+--11		15				11.95
+--12		14.78			11.8	
+
+
+--OBSERVATION: As per the data, the average overall fare is consistent enough for both the months.
+--OBSERVATION: The month of November had slightly higher overall average than december
+
+
+
+--QUERY 2:
+
+--NUMBER OF PASSENGERS PER TRIP
+
+select passenger_count, count(*) as count
+from orcdata
+group by passenger_count
+order by passenger_count;
+
+--OUTPUT:
+--passenger_count 	count
+--	0				6537
+--	1				800988
+--	2				170275
+--	3				49074
+--	4				24052
+--	5				52871
+--	6				32124
+--	7				1
+
+--OBSERVATION: As per the results, most of the rides have been with only one passenger. 
+--OBSERVATION: More than two-thirds of rides are with solo passengers
+--OBSERVATION: The next common is when there are two passengers. 
+
+
+
+--QUERY 3:
+
+--PREFERRED MODE OF PAYMENT
+
+select payment_type, count(*) as count
+from orcdata
+group by payment_type
+order by payment_type;
+
+--OUTPUT:
+--	payment_type	count
+--	1				766110
+--	2				364231
+--	3				4313
+--	4				1268
+
+--OBSERVATION: As per the results of the above query, the preferred mode of payment is 1 i.e. credit card
+--OBSERVATION: Cash payment comes in as second preferred mode of payment
+
+
+
+--QUERY 4:
+
+--AVERAGE TIP PAID PER TRIP
+
+select round(avg(tip_amount), 2) as average_tip
+from orcdata;
+
+--OUTPUT:
+--average_tip
+-- 1.7
+
+--OBSERVATION: Average tip paid per trip in the table is $1.7
+
+
+--COMPARISON OF MEAN WITH PERCENTILE VALUES
+
+select percentile_approx(tip_amount, array(0.25, 0.50, 0.75))
+from orcdata;
+
+--OUTPUT: (The below list is the percentile values of the data on tip_amount for 25, 50 and 75 respectively)
+--[0.0,1.3516617045031634,2.36]
+
+--OBSERVATION: The median of the data is $1.35 and 25th and 75th percentile values are $0.0 and $2.36 respectively
+--OBSERVATION: Since mean i.e. 1.7 is significantly different from 1.35, mean cannot be used a representative statistic as the data is skewed
+
+
+
+--QUERY 5:
+
+--EXPLORATION OF EXTRA VARIABLE
+
+select extra, round((count(*) / 11359.22), 2)
+from orcdata
+group by extra
+order by extra;
+
+--OUTPUT:
+--extra 	_c1
+--	0		52.98
+--	0.5		31.78
+--	1		15.24
+	 
+--OBSERVATION: In the table, 52.98 percent of trips have no extra levied;
+--OBSERVATION: Remaining 47 percent is divided among extra charge of $0.5 -> 31.78% and $1.0 -> 15.24% 
+
+
+
+
+--  **** ANALYSIS 2  **** 
+
+--QUERY 1:
+
+--CORRELATION BETWEEN NUMBER OF PASSENGERS AND THE TIP PAID
+
+select round(corr(passenger_count, tip_amount), 2)
+from orcdata;
+
+--OUTPUT:
+-- -0.01
+
+--OBSERVATION: The correlation is very small and negative and thus no significant correlation can be said about passengers and the tip paid per trip
+
+
+
+--QUERY 2:
+
+--BUCKETING OF TIPS PAID INTO [0-5), [5,10), [10,15), [15,20) AND >=20
+
+select bucket_tips, round((count(*)/11359.22),4) as percent
+from (select
+case when (tip_amount >= 0 and tip_amount < 5) then '[0-5)' 
+     when (tip_amount >= 5 and tip_amount < 10) then '[5-10)' 
+     when (tip_amount >= 10 and tip_amount < 15) then '[10-15)'
+     when (tip_amount >= 15 and tip_amount < 20) then '[15-20)'
+     when (tip_amount >= 20) then '>=20' end bucket_tips
+    from orcdata) T
+group by bucket_tips;
+
+--OUTPUT:
+--bucket_tips 	_c1
+--	>=20		0.0312
+--	[0-5)		93.6517
+--	[10-15)		0.7741
+--	[15-20)		0.0577
+--	[5-10)		5.4854
+
+--OBSERVATION: Based on the query results, the vast majority of passengers belong to the bucket [0-5) with almost 93.65%
+--OBSERVATION: The others are as follows, 5.4854%, 0.7741%, 0.0577% and 0.0312% for  [5,10), [10,15), [15,20) and >=20 respectively
+
+
+
+--QUERY 3:
+
+--AVERAGE SPEED 
+--This Will Be Calculated By Dividing Trip Distance By Difference In Timestamps
+
+select mnth, avg(trip_distance/((unix_timestamp(tpep_dropoff_datetime)-unix_timestamp(tpep_pickup_datetime) )/3600) ) as avg_speed
+from orcdata
+group by mnth;
+
+--OUTPUT:
+--mnth 	avg_speed
+--	11	10.5971480991745
+--	12	10.71343737326898
+	 
+--OBSERVATION: Based on the query results, the average speed is almost the same but the month of december is marginally faster
+
+
+
+--QUERY 4:
+
+--OVERALL AVERAGE SPEED VS AVG SPEED DURING CHRISTMAS AND NEW YEAR
+
+
+--OVERALL AVERAGE SPEED
+
+select avg(trip_distance/((unix_timestamp(tpep_dropoff_datetime)-unix_timestamp(tpep_pickup_datetime) )/3600) ) as avg_speed
+from orcdata;
+
+--The average speed is 10.656
+
+
+--AVERAGE SPEED DURING CHRISTMAS AND NEWYEAR'S EVE
+
+select Day,round(avg(trip_distance/((unix_timestamp(tpep_dropoff_datetime)-unix_timestamp(tpep_pickup_datetime) )/3600)),2) avg_speed
+from ( 
+select trip_distance,tpep_dropoff_datetime,tpep_pickup_datetime,
+case 
+when ((tpep_pickup_datetime>='2017-12-25 00:00:00.0' and tpep_pickup_datetime<'2017-12-26 00:00:00.0')) then 'Christmas'
+when ((tpep_pickup_datetime>='2017-12-31 00:00:00.0' and tpep_pickup_datetime<'2018-01-01 00:00:00.0')  ) then 'New years eve' 
+else 'Other Days' end Day
+from orcdata
+) T
+group by Day;
+
+--OUTPUT:
+--	day 			avg_speed
+--	Christmas		14.52
+--	New years eve	12.8
+--	Other Days		10.6
+
+--OBSERVATION: Based on query results, avg speed during christmas is 14.52, newyear's eve is 12.8 whereas other days is just 10.6
+--OBSERVATION: Thus due to holiday rush, there is a significant increase in average speed especially during chirstmas
+
+
+
+
+-- **** CONCLUSION **** 
+--Passengers prefer travelling solo
+--Passengers prefer to pay by credit cards and also tip less
+--Rides are completed at faster speeds during festive times, probably due to festive rush.
